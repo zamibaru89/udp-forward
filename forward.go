@@ -20,6 +20,7 @@ type connection struct {
 type Forwarder struct {
 	src          *net.UDPAddr
 	dst          *net.UDPAddr
+	srcIP        *net.UDPAddr
 	client       *net.UDPAddr
 	listenerConn *net.UDPConn
 
@@ -42,7 +43,7 @@ const DefaultTimeout = time.Minute * 5
 // timeout to "disconnect" clients after the timeout period of inactivity. It
 // implements a reverse NAT and thus supports multiple seperate users. Forward
 // is also asynchronous.
-func Forward(src, dst string, timeout time.Duration) (*Forwarder, error) {
+func Forward(src, dst, srcIP string, timeout time.Duration) (*Forwarder, error) {
 	forwarder := new(Forwarder)
 	forwarder.connectCallback = func(addr string) {}
 	forwarder.disconnectCallback = func(addr string) {}
@@ -57,6 +58,11 @@ func Forward(src, dst string, timeout time.Duration) (*Forwarder, error) {
 	}
 
 	forwarder.dst, err = net.ResolveUDPAddr("udp", dst)
+	if err != nil {
+		return nil, err
+	}
+
+	forwarder.srcIP, err = net.ResolveUDPAddr("udp", srcIP)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +137,8 @@ func (f *Forwarder) handle(data []byte, addr *net.UDPAddr) {
 			laddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:")
 			udpConn, err = net.DialUDP("udp", laddr, f.dst)
 		} else {
-			udpConn, err = net.DialUDP("udp", nil, f.dst)
+
+			udpConn, err = net.DialUDP("udp", f.srcIP, f.dst)
 		}
 		if err != nil {
 			log.Println("udp-forward: failed to dial:", err)
