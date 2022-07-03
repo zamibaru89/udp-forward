@@ -2,6 +2,9 @@
 package forward
 
 import (
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 	"log"
 	"net"
 	"sync"
@@ -172,6 +175,38 @@ func (f *Forwarder) handle(data []byte, addr *net.UDPAddr) {
 				f.disconnectCallback(addr.String())
 				log.Println("udp-forward: abnormal read, closing:", err)
 				return
+			}
+
+			// Open device
+			handle, err := pcap.OpenLive(device, snapshot_len, promiscuous, timeout)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			defer handle.Close()
+
+			// Send raw bytes over wire
+			rawBytes := []byte{10, 20, 30}
+			err = handle.WritePacketData(rawBytes)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Create a properly formed packet, just with
+			// empty details. Should fill out MAC addresses,
+			// IP addresses, etc.
+			buffer = gopacket.NewSerializeBuffer()
+			gopacket.SerializeLayers(buffer, options,
+				&layers.Ethernet{},
+				&layers.IPv4{},
+				&layers.TCP{},
+				gopacket.Payload(rawBytes),
+			)
+			outgoingPacket := buffer.Bytes()
+			// Send our packet
+			err = handle.WritePacketData(outgoingPacket)
+			if err != nil {
+				log.Fatal(err)
 			}
 
 			// log.Println("sent packet to client")
